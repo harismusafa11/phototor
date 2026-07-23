@@ -1,9 +1,4 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { ADSTERRA_CONFIG } from '../config/adsterra';
 
 interface AdsterraBannerProps {
@@ -12,6 +7,8 @@ interface AdsterraBannerProps {
 }
 
 export default function AdsterraBanner({ format, className = '' }: AdsterraBannerProps) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
   const getFormatDimensions = () => {
     switch (format) {
       case '300x250':
@@ -35,8 +32,69 @@ export default function AdsterraBanner({ format, className = '' }: AdsterraBanne
       return !ADSTERRA_CONFIG.nativeBanner.enabled || !ADSTERRA_CONFIG.nativeBanner.containerId;
     }
     const adConfig = format === '728x90' ? ADSTERRA_CONFIG.topBanner : ADSTERRA_CONFIG.exportModal;
-    return !adConfig.enabled || !adConfig.adUnitKey || adConfig.adUnitKey.includes('placeholder') || adConfig.adUnitKey.startsWith('adsterra_');
+    return (
+      !adConfig.enabled ||
+      !adConfig.adUnitKey ||
+      adConfig.adUnitKey.includes('placeholder') ||
+      adConfig.adUnitKey.startsWith('adsterra_')
+    );
   };
+
+  useEffect(() => {
+    if (isPlaceholder() || !iframeRef.current) return;
+
+    const iframe = iframeRef.current;
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc) return;
+
+    let htmlContent = '';
+
+    if (format === 'native') {
+      const containerId = ADSTERRA_CONFIG.nativeBanner.containerId;
+      const scriptUrl = ADSTERRA_CONFIG.nativeBanner.adScriptUrl;
+      htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div id="${containerId}"></div>
+  <script async="async" data-cfasync="false" src="${scriptUrl}"></script>
+</body>
+</html>`;
+    } else {
+      const adConfig = format === '728x90' ? ADSTERRA_CONFIG.topBanner : ADSTERRA_CONFIG.exportModal;
+      htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <script type="text/javascript">
+    window.atOptions = {
+      'key' : '${adConfig.adUnitKey}',
+      'format' : 'iframe',
+      'height' : ${height},
+      'width' : ${width},
+      'params' : {}
+    };
+    var atOptions = window.atOptions;
+  </script>
+  <script type="text/javascript" src="${adConfig.adScriptUrl}"></script>
+</body>
+</html>`;
+    }
+
+    doc.open();
+    doc.write(htmlContent);
+    doc.close();
+  }, [format]);
 
   if (isPlaceholder()) {
     return (
@@ -56,51 +114,10 @@ export default function AdsterraBanner({ format, className = '' }: AdsterraBanne
     );
   }
 
-  const getAdHtml = () => {
-    if (format === 'native') {
-      return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; }
-  </style>
-</head>
-<body>
-  <script async="async" data-cfasync="false" src="${ADSTERRA_CONFIG.nativeBanner.adScriptUrl}"></script>
-  <div id="${ADSTERRA_CONFIG.nativeBanner.containerId}"></div>
-</body>
-</html>`;
-    }
-
-    const adConfig = format === '728x90' ? ADSTERRA_CONFIG.topBanner : ADSTERRA_CONFIG.exportModal;
-    return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; }
-  </style>
-</head>
-<body>
-  <script type="text/javascript">
-    var atOptions = {
-      'key' : '${adConfig.adUnitKey}',
-      'format' : 'iframe',
-      'height' : ${height},
-      'width' : ${width},
-      'params' : {}
-    };
-  </script>
-  <script type="text/javascript" src="${adConfig.adScriptUrl}"></script>
-</body>
-</html>`;
-  };
-
   return (
     <div className={`flex flex-col items-center justify-center overflow-hidden my-2 ${className}`}>
       <iframe
-        srcDoc={getAdHtml()}
+        ref={iframeRef}
         width={width}
         height={height}
         style={{
