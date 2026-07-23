@@ -44,63 +44,39 @@ export default function AdsterraBanner({ format, className = '' }: AdsterraBanne
     if (!ADSTERRA_CONFIG.enabled || !containerRef.current || isPlaceholder()) return;
 
     const container = containerRef.current;
-    container.innerHTML = ''; // Clear previous container content
+    container.innerHTML = ''; // Clear container
 
-    // Create an isolated iframe using srcdoc so document.write() used by Adsterra invoke.js runs natively without browser blocking
-    const iframe = document.createElement('iframe');
-    iframe.width = `${width}`;
-    iframe.height = `${height}`;
-    iframe.style.width = `${width}px`;
-    iframe.style.height = `${height}px`;
-    iframe.style.maxWidth = '100%';
-    iframe.style.border = 'none';
-    iframe.style.outline = 'none';
-    iframe.style.overflow = 'hidden';
-    iframe.style.background = 'transparent';
-    iframe.setAttribute('scrolling', 'no');
-
-    let htmlContent = '';
     if (format === 'native') {
-      htmlContent = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
-  </style>
-</head>
-<body>
-  <script async="async" data-cfasync="false" src="${ADSTERRA_CONFIG.nativeBanner.adScriptUrl}"></script>
-  <div id="${ADSTERRA_CONFIG.nativeBanner.containerId}"></div>
-</body>
-</html>`;
-    } else {
-      const adConfig = format === '728x90' ? ADSTERRA_CONFIG.topBanner : ADSTERRA_CONFIG.exportModal;
-      htmlContent = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
-  </style>
-</head>
-<body>
-  <script type="text/javascript">
-    var atOptions = {
-      'key' : '${adConfig.adUnitKey}',
-      'format' : 'iframe',
-      'height' : ${height},
-      'width' : ${width},
-      'params' : {}
-    };
-  </script>
-  <script type="text/javascript" src="${adConfig.adScriptUrl}"></script>
-</body>
-</html>`;
-    }
+      // Native Banner Injection directly into main DOM so Adsterra anti-cheat validation passes
+      const nativeDiv = document.createElement('div');
+      nativeDiv.id = ADSTERRA_CONFIG.nativeBanner.containerId;
 
-    iframe.srcdoc = htmlContent;
-    container.appendChild(iframe);
+      const scriptInvoke = document.createElement('script');
+      scriptInvoke.async = true;
+      scriptInvoke.setAttribute('data-cfasync', 'false');
+      scriptInvoke.src = ADSTERRA_CONFIG.nativeBanner.adScriptUrl;
+
+      container.appendChild(nativeDiv);
+      container.appendChild(scriptInvoke);
+    } else {
+      // Banner 728x90 / 300x250 Injection directly into main DOM
+      const adConfig = format === '728x90' ? ADSTERRA_CONFIG.topBanner : ADSTERRA_CONFIG.exportModal;
+
+      // Set global atOptions on window object required by Adsterra invoke.js
+      (window as any).atOptions = {
+        'key': adConfig.adUnitKey,
+        'format': 'iframe',
+        'height': height,
+        'width': width,
+        'params': {}
+      };
+
+      const scriptInvoke = document.createElement('script');
+      scriptInvoke.type = 'text/javascript';
+      scriptInvoke.src = adConfig.adScriptUrl;
+
+      container.appendChild(scriptInvoke);
+    }
 
     return () => {
       if (container) container.innerHTML = '';
