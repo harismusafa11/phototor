@@ -9,7 +9,7 @@
  *    domain headers for Adsterra anti-fraud verification.
  */
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { ADSTERRA_CONFIG } from '../config/adsterra';
 
 interface AdsterraBannerProps {
@@ -18,6 +18,8 @@ interface AdsterraBannerProps {
 }
 
 export default function AdsterraBanner({ format, className = '' }: AdsterraBannerProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const getFormatDimensions = () => {
     switch (format) {
       case '300x250':
@@ -49,51 +51,53 @@ export default function AdsterraBanner({ format, className = '' }: AdsterraBanne
     );
   };
 
-  const iframeSrcDoc = useMemo(() => {
-    if (isPlaceholder()) return '';
+  useEffect(() => {
+    if (isPlaceholder() || !containerRef.current) return;
+
+    const container = containerRef.current;
+    container.innerHTML = '';
 
     if (format === 'native') {
       const containerId = ADSTERRA_CONFIG.nativeBanner.containerId;
       const scriptUrl = ADSTERRA_CONFIG.nativeBanner.adScriptUrl;
-      return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; }
-  </style>
-</head>
-<body>
-  <div id="${containerId}"></div>
-  <script async="async" data-cfasync="false" src="${scriptUrl}"></script>
-</body>
-</html>`;
+
+      const targetDiv = document.createElement('div');
+      targetDiv.id = containerId;
+      container.appendChild(targetDiv);
+
+      const script = document.createElement('script');
+      script.async = true;
+      script.setAttribute('data-cfasync', 'false');
+      script.src = scriptUrl;
+      container.appendChild(script);
+    } else {
+      const adConfig = format === '728x90' ? ADSTERRA_CONFIG.topBanner : ADSTERRA_CONFIG.exportModal;
+
+      const confScript = document.createElement('script');
+      confScript.type = 'text/javascript';
+      confScript.text = `
+        atOptions = {
+          'key' : '${adConfig.adUnitKey}',
+          'format' : 'iframe',
+          'height' : ${height},
+          'width' : ${width},
+          'params' : {}
+        };
+      `;
+
+      const script = document.createElement('script');
+      script.type = 'text/javascript';
+      script.src = adConfig.adScriptUrl;
+
+      container.appendChild(confScript);
+      container.appendChild(script);
     }
 
-    const adConfig = format === '728x90' ? ADSTERRA_CONFIG.topBanner : ADSTERRA_CONFIG.exportModal;
-    return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; display: flex; justify-content: center; align-items: center; }
-  </style>
-</head>
-<body>
-  <script type="text/javascript">
-    atOptions = {
-      'key' : '${adConfig.adUnitKey}',
-      'format' : 'iframe',
-      'height' : ${height},
-      'width' : ${width},
-      'params' : {}
+    return () => {
+      if (container) {
+        container.innerHTML = '';
+      }
     };
-  </script>
-  <script type="text/javascript" src="${adConfig.adScriptUrl}"></script>
-</body>
-</html>`;
   }, [format]);
 
   if (isPlaceholder()) {
@@ -116,21 +120,16 @@ export default function AdsterraBanner({ format, className = '' }: AdsterraBanne
 
   return (
     <div className={`flex flex-col items-center justify-center overflow-hidden my-2 ${className}`}>
-      <iframe
-        srcDoc={iframeSrcDoc}
-        width={width}
-        height={height}
+      <div
+        ref={containerRef}
         style={{
           width: `${width}px`,
           maxWidth: '100%',
-          height: `${height}px`,
-          border: 'none',
-          outline: 'none',
-          overflow: 'hidden',
-          background: 'transparent',
+          minHeight: `${height}px`,
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
         }}
-        scrolling="no"
-        title={`adsterra-${format}`}
       />
     </div>
   );
