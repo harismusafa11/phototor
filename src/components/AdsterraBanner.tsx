@@ -1,23 +1,17 @@
 /**
  * AdsterraBanner — React integration for Adsterra display ads.
  *
- * WHY IFRAME: Adsterra's invoke.js uses document.write() internally.
- * document.write() only works during the initial page parse phase.
- * In a React SPA the page has already loaded, so document.write()
- * from dynamically appended scripts is silently blocked by the browser.
+ * CRITICAL: Adsterra's invoke.js has TWO modes:
+ *   1. Synchronous (atOptions) — uses document.write() → BROKEN in React SPA
+ *   2. Async (atAsyncOptions) — uses createElement + container → WORKS in React SPA
  *
- * Solution: render ads inside a fresh iframe whose document hasn't
- * finished loading yet. We listen for the iframe's 'load' event on
- * about:blank, then use doc.open/write/close to inject the full
- * Adsterra snippet. The scripts execute during the iframe's parse,
- * where document.write() works correctly.
- *
- * Each AdsterraBanner instance gets its own isolated iframe context,
- * so multiple ads on the same page can't conflict with each other's
- * atOptions globals.
+ * We MUST use the atAsyncOptions pattern with a container ID.
+ * The invoke.js script reads window.atAsyncOptions[], finds the matching
+ * config by key, and renders the ad into the specified container element
+ * using document.createElement (no document.write).
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { ADSTERRA_CONFIG } from '../config/adsterra';
 
 interface AdsterraBannerProps {
@@ -26,9 +20,8 @@ interface AdsterraBannerProps {
 }
 
 export default function AdsterraBanner({ format, className = '' }: AdsterraBannerProps) {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const hasInjected = useRef(false);
-  const [iframeKey, setIframeKey] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const injectedRef = useRef(false);
 
   const getFormatDimensions = () => {
     switch (format) {
@@ -61,77 +54,74 @@ export default function AdsterraBanner({ format, className = '' }: AdsterraBanne
     );
   };
 
-  const buildAdHtml = (): string => {
-    if (format === 'native') {
-      const containerId = ADSTERRA_CONFIG.nativeBanner.containerId;
-      const scriptUrl = ADSTERRA_CONFIG.nativeBanner.adScriptUrl;
-      return `<!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;min-height:100%;background:transparent;overflow:auto}</style>
-</head><body>
-<div id="${containerId}"></div>
-<script async="async" data-cfasync="false" src="${scriptUrl}"><\/script>
-</body></html>`;
-    }
-
-    const adConfig = format === '728x90' ? ADSTERRA_CONFIG.topBanner : ADSTERRA_CONFIG.exportModal;
-    return `<!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;background:transparent;overflow:hidden;display:flex;justify-content:center;align-items:center}</style>
-</head><body>
-<script type="text/javascript">
-  atOptions = {
-    'key' : '${adConfig.adUnitKey}',
-    'format' : 'iframe',
-    'height' : ${height},
-    'width' : ${width},
-    'params' : {}
-  };
-<\/script>
-<script type="text/javascript" src="${adConfig.adScriptUrl}"><\/script>
-</body></html>`;
-  };
-
   useEffect(() => {
-    if (isPlaceholder()) return;
+    if (isPlaceholder() || !containerRef.current || injectedRef.current) return;
+    injectedRef.current = true;
 
-    // Reset injection flag when key changes (re-mount)
-    hasInjected.current = false;
+    const container = containerRef.current;
 
-    const iframe = iframeRef.current;
-    if (!iframe) return;
+    if (format === 'native') {
+      // ═══════════════════════════════════════════════
+      // NATIVE BANNER — uses container div + async script
+      // The native script populates the container by ID
+      // ═══════════════════════════════════════════════
+      const nativeDiv = document.createElement('div');
+      nativeDiv.id = ADSTERRA_CONFIG.nativeBanner.containerId;
+      container.appendChild(nativeDiv);
 
-    const injectAd = () => {
-      if (hasInjected.current) return;
-      hasInjected.current = true;
-
-      try {
-        const doc = iframe.contentDocument || iframe.contentWindow?.document;
-        if (!doc) return;
-
-        const html = buildAdHtml();
-        doc.open();
-        doc.write(html);
-        doc.close();
-      } catch (e) {
-        // Cross-origin or security error — silently ignore
-        console.warn('[AdsterraBanner] Failed to inject ad:', e);
-      }
-    };
-
-    // For about:blank, the iframe is usually ready immediately,
-    // but we also listen for load just in case
-    if (iframe.contentDocument?.readyState === 'complete') {
-      injectAd();
+      const script = document.createElement('script');
+      script.async = true;
+      script.setAttribute('data-cfasync', 'false');
+      script.src = ADSTERRA_CONFIG.nativeBanner.adScriptUrl;
+      container.appendChild(script);
     } else {
-      iframe.addEventListener('load', injectAd, { once: true });
+      // ═══════════════════════════════════════════════
+      // DISPLAY BANNER — uses atAsyncOptions pattern
+      // This tells invoke.js to use createElement (not document.write)
+      // and render the ad into the specified container element
+      // ═══════════════════════════════════════════════
+      const adConfig = format === '728x90' ? ADSTERRA_CONFIG.topBanner : ADSTERRA_CONFIG.exportModal;
+      const containerId = `atContainer-${adConfig.adUnitKey}`;
+
+      // Step 1: Create the target container div where the ad iframe will be placed
+      const adTargetDiv = document.createElement('div');
+      adTargetDiv.id = containerId;
+      container.appendChild(adTargetDiv);
+
+      // Step 2: Push config to window.atAsyncOptions array
+      // The invoke.js script reads this array and processes each entry
+      const confScript = document.createElement('script');
+      confScript.type = 'text/javascript';
+      confScript.textContent = [
+        'if (typeof window.atAsyncOptions !== "object") window.atAsyncOptions = [];',
+        'window.atAsyncOptions.push(' + JSON.stringify({
+          key: adConfig.adUnitKey,
+          format: 'iframe',
+          height: height,
+          width: width,
+          params: {},
+          container: containerId,
+        }) + ');',
+      ].join('\n');
+      container.appendChild(confScript);
+
+      // Step 3: Load invoke.js — it will find the atAsyncOptions entry
+      // matching its key, and render the ad into containerId
+      const invokeScript = document.createElement('script');
+      invokeScript.type = 'text/javascript';
+      invokeScript.async = true;
+      invokeScript.src = adConfig.adScriptUrl;
+      container.appendChild(invokeScript);
     }
 
     return () => {
-      iframe.removeEventListener('load', injectAd);
-      hasInjected.current = false;
+      injectedRef.current = false;
+      // Remove injected DOM elements
+      while (container.firstChild) {
+        container.removeChild(container.firstChild);
+      }
     };
-  }, [format, iframeKey]);
+  }, [format]);
 
   if (isPlaceholder()) {
     return (
@@ -153,24 +143,13 @@ export default function AdsterraBanner({ format, className = '' }: AdsterraBanne
 
   return (
     <div className={`flex flex-col items-center justify-center overflow-hidden my-2 ${className}`}>
-      <iframe
-        key={iframeKey}
-        ref={iframeRef}
-        src="about:blank"
-        sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms"
-        width={width}
-        height={height}
+      <div
+        ref={containerRef}
         style={{
           width: `${width}px`,
           maxWidth: '100%',
-          height: `${height}px`,
-          border: 'none',
-          outline: 'none',
-          overflow: 'hidden',
-          background: 'transparent',
+          minHeight: `${height}px`,
         }}
-        scrolling="no"
-        title={`adsterra-${format}`}
       />
     </div>
   );
