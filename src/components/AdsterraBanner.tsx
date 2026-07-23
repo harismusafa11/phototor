@@ -1,11 +1,12 @@
 /**
- * AdsterraBanner — Main DOM integration for Adsterra Ads.
+ * AdsterraBanner — Same-Origin Iframe Injection for Adsterra Ads.
  *
- * Adsterra's invoke.js validates window.location.host to prevent anti-fraud blocks.
- * Running invoke.js on the main window DOM ensures the publisher domain
- * (e.g. www.phototorstudio.com) is passed correctly to Adsterra servers.
- *
- * Both window.atOptions and window.atAsyncOptions are populated before script execution.
+ * Pattern:
+ * 1. Create <iframe> on main DOM (inherits same-origin www.phototorstudio.com).
+ * 2. Execute doc.open() -> doc.write() -> doc.close() immediately during mount.
+ * 3. This allows document.write() inside invoke.js to run during initial document
+ *    parse phase without browser blocking, while preserving valid same-origin
+ *    domain headers for Adsterra anti-fraud verification.
  */
 
 import React, { useEffect, useRef } from 'react';
@@ -14,13 +15,6 @@ import { ADSTERRA_CONFIG } from '../config/adsterra';
 interface AdsterraBannerProps {
   format: '300x250' | '728x90' | '160x600' | 'native';
   className?: string;
-}
-
-declare global {
-  interface Window {
-    atOptions?: any;
-    atAsyncOptions?: any[];
-  }
 }
 
 export default function AdsterraBanner({ format, className = '' }: AdsterraBannerProps) {
@@ -65,45 +59,69 @@ export default function AdsterraBanner({ format, className = '' }: AdsterraBanne
     const container = containerRef.current;
     container.innerHTML = '';
 
-    if (format === 'native') {
-      const nativeDiv = document.createElement('div');
-      nativeDiv.id = ADSTERRA_CONFIG.nativeBanner.containerId;
-      container.appendChild(nativeDiv);
+    // Create same-origin iframe
+    const iframe = document.createElement('iframe');
+    iframe.width = `${width}`;
+    iframe.height = `${height}`;
+    iframe.style.width = `${width}px`;
+    iframe.style.maxWidth = '100%';
+    iframe.style.height = `${height}px`;
+    iframe.style.border = 'none';
+    iframe.style.outline = 'none';
+    iframe.style.overflow = 'hidden';
+    iframe.style.background = 'transparent';
+    iframe.setAttribute('scrolling', 'no');
+    iframe.setAttribute('title', `adsterra-${format}`);
 
-      const script = document.createElement('script');
-      script.async = true;
-      script.setAttribute('data-cfasync', 'false');
-      script.src = ADSTERRA_CONFIG.nativeBanner.adScriptUrl;
-      container.appendChild(script);
-    } else {
-      const adConfig = format === '728x90' ? ADSTERRA_CONFIG.topBanner : ADSTERRA_CONFIG.exportModal;
+    container.appendChild(iframe);
 
-      // 1. Set global atOptions
-      window.atOptions = {
-        key: adConfig.adUnitKey,
-        format: 'iframe',
-        height: height,
-        width: width,
-        params: {},
-      };
-
-      // 2. Set global atAsyncOptions array as fallback
-      if (!Array.isArray(window.atAsyncOptions)) {
-        window.atAsyncOptions = [];
+    // Synchronously write HTML to the iframe document during open phase
+    const doc = iframe.contentWindow?.document || iframe.contentDocument;
+    if (doc) {
+      doc.open();
+      if (format === 'native') {
+        const containerId = ADSTERRA_CONFIG.nativeBanner.containerId;
+        const scriptUrl = ADSTERRA_CONFIG.nativeBanner.adScriptUrl;
+        doc.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; }
+  </style>
+</head>
+<body>
+  <div id="${containerId}"></div>
+  <script async="async" data-cfasync="false" src="${scriptUrl}"></script>
+</body>
+</html>`);
+      } else {
+        const adConfig = format === '728x90' ? ADSTERRA_CONFIG.topBanner : ADSTERRA_CONFIG.exportModal;
+        doc.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; display: flex; justify-content: center; align-items: center; }
+  </style>
+</head>
+<body>
+  <script type="text/javascript">
+    atOptions = {
+      'key' : '${adConfig.adUnitKey}',
+      'format' : 'iframe',
+      'height' : ${height},
+      'width' : ${width},
+      'params' : {}
+    };
+  </script>
+  <script type="text/javascript" src="${adConfig.adScriptUrl}"></script>
+</body>
+</html>`);
       }
-      window.atAsyncOptions.push({
-        key: adConfig.adUnitKey,
-        format: 'iframe',
-        height: height,
-        width: width,
-        params: {},
-      });
-
-      // 3. Append invoke.js to container
-      const script = document.createElement('script');
-      script.type = 'text/javascript';
-      script.src = adConfig.adScriptUrl;
-      container.appendChild(script);
+      doc.close();
     }
 
     return () => {
