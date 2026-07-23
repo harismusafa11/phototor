@@ -1,15 +1,14 @@
 /**
- * AdsterraBanner — Robust React iframe srcDoc integration for Adsterra Ads.
+ * AdsterraBanner — Main DOM integration for Adsterra Ads.
  *
- * Why srcDoc iframe:
- * Adsterra's invoke.js script relies on document.write() for display ads.
- * In a React SPA, executing document.write() after page load is blocked by browsers.
- * Passing the script snippet inside an <iframe srcDoc="..." /> causes the browser
- * to execute document.write() DURING the iframe's initial document parse,
- * which allows Adsterra ads to render 100% reliably in React apps.
+ * Adsterra's invoke.js validates window.location.host to prevent anti-fraud blocks.
+ * Running invoke.js on the main window DOM ensures the publisher domain
+ * (e.g. www.phototorstudio.com) is passed correctly to Adsterra servers.
+ *
+ * Both window.atOptions and window.atAsyncOptions are populated before script execution.
  */
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { ADSTERRA_CONFIG } from '../config/adsterra';
 
 interface AdsterraBannerProps {
@@ -17,7 +16,17 @@ interface AdsterraBannerProps {
   className?: string;
 }
 
+declare global {
+  interface Window {
+    atOptions?: any;
+    atAsyncOptions?: any[];
+  }
+}
+
 export default function AdsterraBanner({ format, className = '' }: AdsterraBannerProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const injectedRef = useRef(false);
+
   const getFormatDimensions = () => {
     switch (format) {
       case '300x250':
@@ -49,6 +58,62 @@ export default function AdsterraBanner({ format, className = '' }: AdsterraBanne
     );
   };
 
+  useEffect(() => {
+    if (isPlaceholder() || !containerRef.current || injectedRef.current) return;
+    injectedRef.current = true;
+
+    const container = containerRef.current;
+    container.innerHTML = '';
+
+    if (format === 'native') {
+      const nativeDiv = document.createElement('div');
+      nativeDiv.id = ADSTERRA_CONFIG.nativeBanner.containerId;
+      container.appendChild(nativeDiv);
+
+      const script = document.createElement('script');
+      script.async = true;
+      script.setAttribute('data-cfasync', 'false');
+      script.src = ADSTERRA_CONFIG.nativeBanner.adScriptUrl;
+      container.appendChild(script);
+    } else {
+      const adConfig = format === '728x90' ? ADSTERRA_CONFIG.topBanner : ADSTERRA_CONFIG.exportModal;
+
+      // 1. Set global atOptions
+      window.atOptions = {
+        key: adConfig.adUnitKey,
+        format: 'iframe',
+        height: height,
+        width: width,
+        params: {},
+      };
+
+      // 2. Set global atAsyncOptions array as fallback
+      if (!Array.isArray(window.atAsyncOptions)) {
+        window.atAsyncOptions = [];
+      }
+      window.atAsyncOptions.push({
+        key: adConfig.adUnitKey,
+        format: 'iframe',
+        height: height,
+        width: width,
+        params: {},
+      });
+
+      // 3. Append invoke.js to container
+      const script = document.createElement('script');
+      script.type = 'text/javascript';
+      script.src = adConfig.adScriptUrl;
+      container.appendChild(script);
+    }
+
+    return () => {
+      injectedRef.current = false;
+      if (container) {
+        container.innerHTML = '';
+      }
+    };
+  }, [format]);
+
   if (isPlaceholder()) {
     return (
       <div className={`flex flex-col items-center justify-center overflow-hidden my-2 ${className}`}>
@@ -67,68 +132,18 @@ export default function AdsterraBanner({ format, className = '' }: AdsterraBanne
     );
   }
 
-  const getSrcDoc = () => {
-    if (format === 'native') {
-      const containerId = ADSTERRA_CONFIG.nativeBanner.containerId;
-      const scriptUrl = ADSTERRA_CONFIG.nativeBanner.adScriptUrl;
-      return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; }
-  </style>
-</head>
-<body>
-  <div id="${containerId}"></div>
-  <script async="async" data-cfasync="false" src="${scriptUrl}"></script>
-</body>
-</html>`;
-    }
-
-    const adConfig = format === '728x90' ? ADSTERRA_CONFIG.topBanner : ADSTERRA_CONFIG.exportModal;
-    return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; display: flex; justify-content: center; align-items: center; }
-  </style>
-</head>
-<body>
-  <script type="text/javascript">
-    atOptions = {
-      'key' : '${adConfig.adUnitKey}',
-      'format' : 'iframe',
-      'height' : ${height},
-      'width' : ${width},
-      'params' : {}
-    };
-  </script>
-  <script type="text/javascript" src="${adConfig.adScriptUrl}"></script>
-</body>
-</html>`;
-  };
-
   return (
     <div className={`flex flex-col items-center justify-center overflow-hidden my-2 ${className}`}>
-      <iframe
-        title={`adsterra-ad-${format}`}
-        srcDoc={getSrcDoc()}
-        width={width}
-        height={height}
+      <div
+        ref={containerRef}
         style={{
           width: `${width}px`,
           maxWidth: '100%',
-          height: `${height}px`,
-          border: 'none',
-          outline: 'none',
-          overflow: 'hidden',
-          background: 'transparent',
+          minHeight: `${height}px`,
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
         }}
-        scrolling="no"
       />
     </div>
   );
