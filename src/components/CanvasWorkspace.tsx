@@ -3244,7 +3244,7 @@ export default function CanvasWorkspace({
               }
 
               const fillAlpha = brushOpacity;
-              const rgbStr = isEraser ? '0,0,0' : `${brushR},${brushG},${brushB}`;
+              const rgbStr = isEraser ? '255,255,255' : `${brushR},${brushG},${brushB}`;
 
               if (brushType === 'Flat') {
                 // Flat brush (horizontal rectangular tip)
