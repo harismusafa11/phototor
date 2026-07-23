@@ -3371,14 +3371,19 @@ export default function CanvasWorkspace({
           };
 
           paintSegment(offCtx, p0.x, p0.y, p1.x, p1.y);
-          const canvas = canvasRef.current;
-          if (canvas) {
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-              ctx.save();
-              ctx.translate(activeLayer.x, activeLayer.y);
-              paintSegment(ctx, p0.x, p0.y, p1.x, p1.y);
-              ctx.restore();
+
+          if (isEraser) {
+            renderBgEraserDirect();
+          } else {
+            const canvas = canvasRef.current;
+            if (canvas) {
+              const ctx = canvas.getContext('2d');
+              if (ctx) {
+                ctx.save();
+                ctx.translate(activeLayer.x, activeLayer.y);
+                paintSegment(ctx, p0.x, p0.y, p1.x, p1.y);
+                ctx.restore();
+              }
             }
           }
         }
