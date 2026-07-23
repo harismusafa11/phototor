@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import { ADSTERRA_CONFIG } from '../config/adsterra';
 
 interface AdsterraBannerProps {
@@ -12,8 +12,6 @@ interface AdsterraBannerProps {
 }
 
 export default function AdsterraBanner({ format, className = '' }: AdsterraBannerProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-
   const getFormatDimensions = () => {
     switch (format) {
       case '300x250':
@@ -40,102 +38,83 @@ export default function AdsterraBanner({ format, className = '' }: AdsterraBanne
     return !adConfig.enabled || !adConfig.adUnitKey || adConfig.adUnitKey.includes('placeholder') || adConfig.adUnitKey.startsWith('adsterra_');
   };
 
-  useEffect(() => {
-    if (!ADSTERRA_CONFIG.enabled || !containerRef.current || isPlaceholder()) return;
+  if (isPlaceholder()) {
+    return (
+      <div className={`flex flex-col items-center justify-center overflow-hidden my-2 ${className}`}>
+        <div
+          style={{ width: `${width}px`, maxWidth: '100%', minHeight: `${height}px` }}
+          className="bg-[#181824] border border-[#2a2a38] rounded-lg flex flex-col items-center justify-center relative overflow-hidden select-none p-4 text-center space-y-1.5"
+        >
+          <div className="flex items-center gap-1.5 text-[9px] font-mono tracking-wider text-indigo-400 font-bold uppercase px-2 py-0.5 bg-indigo-500/10 border border-indigo-500/20 rounded">
+            <span>Sponsor Ad Placement</span>
+          </div>
+          <span className="text-[11px] font-sans text-gray-300 font-medium">
+            Adsterra Banner Slot ({format})
+          </span>
+        </div>
+      </div>
+    );
+  }
 
-    const container = containerRef.current;
-    container.innerHTML = ''; // Clear previous content
-
-    // Create a sandboxed iframe with an open document stream so Adsterra invoke.js document.write() appends seamlessly without wiping document
-    const iframe = document.createElement('iframe');
-    iframe.width = `${width}`;
-    iframe.height = `${height}`;
-    iframe.style.width = `${width}px`;
-    iframe.style.height = `${height}px`;
-    iframe.style.maxWidth = '100%';
-    iframe.style.border = 'none';
-    iframe.style.outline = 'none';
-    iframe.style.overflow = 'hidden';
-    iframe.style.background = 'transparent';
-    iframe.setAttribute('scrolling', 'no');
-
-    container.appendChild(iframe);
-
-    try {
-      const doc = iframe.contentWindow?.document;
-      if (doc) {
-        doc.open();
-        if (format === 'native') {
-          doc.write(`
-            <!DOCTYPE html>
-            <html>
-              <head>
-                <meta charset="utf-8">
-                <style>
-                  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; }
-                </style>
-              </head>
-              <body>
-                <script async="async" data-cfasync="false" src="${ADSTERRA_CONFIG.nativeBanner.adScriptUrl}"></script>
-                <div id="${ADSTERRA_CONFIG.nativeBanner.containerId}"></div>
-              </body>
-            </html>
-          `);
-        } else {
-          const adConfig = format === '728x90' ? ADSTERRA_CONFIG.topBanner : ADSTERRA_CONFIG.exportModal;
-          doc.write(`
-            <!DOCTYPE html>
-            <html>
-              <head>
-                <meta charset="utf-8">
-                <style>
-                  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; }
-                </style>
-              </head>
-              <body>
-                <script type="text/javascript">
-                  var atOptions = {
-                    'key' : '${adConfig.adUnitKey}',
-                    'format' : 'iframe',
-                    'height' : ${height},
-                    'width' : ${width},
-                    'params' : {}
-                  };
-                </script>
-                <script type="text/javascript" src="${adConfig.adScriptUrl}"></script>
-              </body>
-            </html>
-          `);
-        }
-        // IMPORTANT: Do NOT call doc.close() here! Leaving the stream open allows Adsterra's async invoke.js script to execute document.write() into the open stream without wiping the document.
-      }
-    } catch (e) {
-      console.warn("Adsterra iframe doc write exception:", e);
+  const getAdHtml = () => {
+    if (format === 'native') {
+      return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <script async="async" data-cfasync="false" src="${ADSTERRA_CONFIG.nativeBanner.adScriptUrl}"></script>
+  <div id="${ADSTERRA_CONFIG.nativeBanner.containerId}"></div>
+</body>
+</html>`;
     }
 
-    return () => {
-      if (container) container.innerHTML = '';
+    const adConfig = format === '728x90' ? ADSTERRA_CONFIG.topBanner : ADSTERRA_CONFIG.exportModal;
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <script type="text/javascript">
+    var atOptions = {
+      'key' : '${adConfig.adUnitKey}',
+      'format' : 'iframe',
+      'height' : ${height},
+      'width' : ${width},
+      'params' : {}
     };
-  }, [format, width, height]);
+  </script>
+  <script type="text/javascript" src="${adConfig.adScriptUrl}"></script>
+</body>
+</html>`;
+  };
 
   return (
     <div className={`flex flex-col items-center justify-center overflow-hidden my-2 ${className}`}>
-      <div
-        ref={containerRef}
-        style={{ width: `${width}px`, maxWidth: '100%', minHeight: `${height}px` }}
-        className="bg-[#14141c]/60 border border-[#242432] rounded-lg flex flex-col items-center justify-center relative overflow-hidden select-none"
-      >
-        {isPlaceholder() && (
-          <div className="flex flex-col items-center justify-center p-4 text-center space-y-1.5 w-full h-full bg-gradient-to-br from-[#181824] to-[#12121a]">
-            <div className="flex items-center gap-1.5 text-[9px] font-mono tracking-wider text-indigo-400 font-bold uppercase px-2 py-0.5 bg-indigo-500/10 border border-indigo-500/20 rounded">
-              <span>Sponsor Ad Placement</span>
-            </div>
-            <span className="text-[11px] font-sans text-gray-300 font-medium">
-              Adsterra Banner Slot ({format})
-            </span>
-          </div>
-        )}
-      </div>
+      <iframe
+        srcDoc={getAdHtml()}
+        width={width}
+        height={height}
+        style={{
+          width: `${width}px`,
+          maxWidth: '100%',
+          height: `${height}px`,
+          border: 'none',
+          outline: 'none',
+          overflow: 'hidden',
+          background: 'transparent'
+        }}
+        scrolling="no"
+        title={`adsterra-${format}`}
+      />
     </div>
   );
 }
