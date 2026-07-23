@@ -145,9 +145,16 @@ export default function Dashboard({
       return () => {
         const el = document.getElementById('adsterra-socialbar-script');
         if (el) el.remove();
-        // Clean up any injected Social Bar floating elements when unmounting Dashboard
-        const popEls = document.querySelectorAll('div[id*="at-"], div[class*="at-"], iframe[src*="tuxedoarbour"]');
-        popEls.forEach((e) => e.remove());
+        // Clean up ONLY Social Bar floating/overlay elements (direct body children)
+        // Social Bar injects floating popups as direct children of document.body
+        // Do NOT remove banner ad elements which live inside React component containers
+        document.querySelectorAll('body > div[id*="at-"], body > div[class*="at-"]').forEach((e) => {
+          // Only remove if it looks like a floating overlay (fixed/absolute positioned)
+          const style = window.getComputedStyle(e);
+          if (style.position === 'fixed' || style.position === 'absolute') {
+            e.remove();
+          }
+        });
       };
     }
   }, []);
