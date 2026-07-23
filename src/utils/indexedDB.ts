@@ -6,7 +6,7 @@
 import { Project, Layer } from '../types';
 
 const DB_NAME = 'phototor_db';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Bumped to add userId index for per-account isolation
 const STORE_NAME = 'projects';
 
 import { supabase } from '../lib/supabase';
@@ -21,10 +21,41 @@ function openDB(): Promise<IDBDatabase> {
     request.onupgradeneeded = (event) => {
       const db = request.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+        const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+        store.createIndex('userId', 'userId', { unique: false });
+      } else {
+        // Migrate existing store: add userId index if missing
+        const store = (event.target as IDBOpenDBRequest).transaction!.objectStore(STORE_NAME);
+        if (!store.indexNames.contains('userId')) {
+          store.createIndex('userId', 'userId', { unique: false });
+        }
       }
     };
   });
+}
+
+/**
+ * Remove all locally cached projects that belong to OTHER users.
+ * Call this after login/logout to prevent cross-account project leakage.
+ */
+export async function clearOtherUsersLocalProjects(currentUserId: string): Promise<void> {
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const allProjects: any[] = await new Promise((resolve, reject) => {
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+    for (const proj of allProjects) {
+      if (proj.userId && proj.userId !== currentUserId) {
+        store.delete(proj.id);
+      }
+    }
+  } catch (e) {
+    console.warn('Could not clear other users local projects:', e);
+  }
 }
 
 // Convert image layer HTMLImageElement/imageUrl to Blobs before saving, and vice versa on load
@@ -57,8 +88,18 @@ export async function saveProject(project: Project, userId?: string): Promise<vo
     })
   );
 
-  const serializedProject: Project = {
+  // Get userId from session if not provided
+  let resolvedUserId = userId;
+  if (!resolvedUserId) {
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      resolvedUserId = session?.user?.id;
+    } catch { /* offline */ }
+  }
+
+  const serializedProject: any = {
     ...project,
+    userId: resolvedUserId || null, // Tag project with owner userId for per-account isolation
     layers: serializedLayers,
     updatedAt: Date.now(),
   };
@@ -102,11 +143,16 @@ export async function saveProject(project: Project, userId?: string): Promise<vo
 }
 
 export async function loadProjects(userId?: string): Promise<Project[]> {
+  let targetUserId = userId;
+  if (!targetUserId) {
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      targetUserId = session?.user?.id;
+    } catch {}
+  }
+
   // 1. Sync from Supabase DB first if logged in
   try {
-    const session = (await supabase.auth.getSession()).data.session;
-    const targetUserId = userId || session?.user?.id;
-
     if (targetUserId) {
       const { data, error } = await supabase
         .from('user_projects')
@@ -131,7 +177,7 @@ export async function loadProjects(userId?: string): Promise<Project[]> {
     console.warn("Could not fetch projects from Supabase DB:", e);
   }
 
-  // 2. Fetch from IndexedDB
+  // 2. Fetch from IndexedDB — filter by userId for per-account isolation
   const db = await openDB();
   const tx = db.transaction(STORE_NAME, 'readonly');
   const store = tx.objectStore(STORE_NAME);
@@ -139,7 +185,17 @@ export async function loadProjects(userId?: string): Promise<Project[]> {
   return new Promise((resolve, reject) => {
     const request = store.getAll();
     request.onsuccess = () => {
-      const projects = request.result || [];
+      let projects: any[] = request.result || [];
+
+      // Filter: only show projects belonging to this user
+      // Allow projects without userId (legacy/guest) only if no userId is provided
+      if (targetUserId) {
+        projects = projects.filter((p) => p.userId === targetUserId);
+      } else {
+        // Guest mode: only show projects without a userId tag
+        projects = projects.filter((p) => !p.userId);
+      }
+
       // Hydrate project URLs
       const hydrated = projects.map((p) => {
         p.layers = p.layers.map((layer: any) => {

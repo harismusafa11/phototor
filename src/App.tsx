@@ -45,7 +45,7 @@ import {
 
 import JSZip from 'jszip';
 import { Project, Layer, ToolType, SubToolType, Adjustments, Point, GridSettings, LayerGroup, CurvePoint, LevelsParams, FilterGalleryParams, AlignmentGuides, FilterEffect, PanelId, WorkspaceLayout, Slice, WarpConfig } from './types';
-import { saveProject, loadProjects, loadProject, hydrateLayerImage } from './utils/indexedDB';
+import { saveProject, loadProjects, loadProject, hydrateLayerImage, clearOtherUsersLocalProjects } from './utils/indexedDB';
 import { removeBackground, inpaintObject, blendHealingBrushTexture, upscaleImage, warpPerspective, applyPatchBlend, applyCurves, applyLevels, applyFilterGallery } from './utils/filters';
 import { renderProjectToCanvas, clearLayerCache } from './utils/canvas';
 import { removeBackground as imglyRemoveBackground } from '@imgly/background-removal';
@@ -196,6 +196,13 @@ export default function App() {
       window.removeEventListener('keydown', handleUserActivity);
     };
   }, []);
+
+  // Ensure IndexedDB cleans up projects belonging to other accounts on user login
+  useEffect(() => {
+    if (userProfile?.id) {
+      clearOtherUsersLocalProjects(userProfile.id);
+    }
+  }, [userProfile?.id]);
 
   const saveActiveSession = (profile: UserProfile) => {
     try {
@@ -1651,11 +1658,11 @@ export default function App() {
   // Load projects list for matching color
   useEffect(() => {
     if (activeImageDialog === 'match-color') {
-      loadProjects().then((projs) => {
+      loadProjects(userProfile?.id).then((projs) => {
         setProjectsList(projs.filter((p) => p.id !== currentProjId));
       });
     }
-  }, [activeImageDialog, currentProjId]);
+  }, [activeImageDialog, currentProjId, userProfile?.id]);
 
   // Handle dragging and reordering panel tabs in panel groups
   const handleReorderGroupPanels = (reorderedIds: PanelId[]) => {
