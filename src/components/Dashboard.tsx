@@ -133,6 +133,25 @@ export default function Dashboard({
     fetchProjects();
   }, [userProfile]);
 
+  // Adsterra Social Bar script loader (ONLY active on Dashboard page, NOT Canvas Editor)
+  useEffect(() => {
+    if (ADSTERRA_CONFIG.enabled && ADSTERRA_CONFIG.socialBar.enabled) {
+      const script = document.createElement('script');
+      script.id = 'adsterra-socialbar-script';
+      script.src = ADSTERRA_CONFIG.socialBar.adScriptUrl;
+      script.type = 'text/javascript';
+      document.body.appendChild(script);
+
+      return () => {
+        const el = document.getElementById('adsterra-socialbar-script');
+        if (el) el.remove();
+        // Clean up any injected Social Bar floating elements when unmounting Dashboard
+        const popEls = document.querySelectorAll('div[id*="at-"], div[class*="at-"], iframe[src*="tuxedoarbour"]');
+        popEls.forEach((e) => e.remove());
+      };
+    }
+  }, []);
+
   const fetchProjects = async () => {
     const projs = await loadProjects(userProfile?.id);
     setProjects(projs);
@@ -833,6 +852,12 @@ export default function Dashboard({
               )}
             </div>
 
+            {/* Adsterra Native Banner Slot */}
+            {ADSTERRA_CONFIG.enabled && ADSTERRA_CONFIG.nativeBanner.enabled && (
+              <div className="w-full flex justify-center my-6">
+                <AdsterraBanner format="native" />
+              </div>
+            )}
           </div>
         )}
 

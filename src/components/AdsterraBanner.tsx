@@ -7,7 +7,7 @@ import React, { useEffect, useRef } from 'react';
 import { ADSTERRA_CONFIG } from '../config/adsterra';
 
 interface AdsterraBannerProps {
-  format: '300x250' | '728x90' | '160x600';
+  format: '300x250' | '728x90' | '160x600' | 'native';
   className?: string;
 }
 
@@ -22,6 +22,8 @@ export default function AdsterraBanner({ format, className = '' }: AdsterraBanne
         return { width: 728, height: 90 };
       case '160x600':
         return { width: 160, height: 600 };
+      case 'native':
+        return { width: 728, height: 160 };
       default:
         return { width: 300, height: 250 };
     }
@@ -31,41 +33,52 @@ export default function AdsterraBanner({ format, className = '' }: AdsterraBanne
 
   const isPlaceholder = () => {
     if (!ADSTERRA_CONFIG.enabled) return true;
+    if (format === 'native') {
+      return !ADSTERRA_CONFIG.nativeBanner.enabled || !ADSTERRA_CONFIG.nativeBanner.containerId;
+    }
     const adConfig = format === '728x90' ? ADSTERRA_CONFIG.topBanner : ADSTERRA_CONFIG.exportModal;
-    return !adConfig.enabled || adConfig.adUnitKey.includes('placeholder') || adConfig.adUnitKey === 'adsterra_300x250_key' || adConfig.adUnitKey === 'adsterra_728x90_key';
-  };
-
-  const adScriptUrlFormat = (url: string) => {
-    if (url.startsWith('//')) return `https:${url}`;
-    return url;
+    return !adConfig.enabled || adConfig.adUnitKey.includes('placeholder') || adConfig.adUnitKey.startsWith('adsterra_');
   };
 
   useEffect(() => {
     if (!ADSTERRA_CONFIG.enabled || !containerRef.current || isPlaceholder()) return;
 
-    const adConfig = format === '728x90' ? ADSTERRA_CONFIG.topBanner : ADSTERRA_CONFIG.exportModal;
-
     const container = containerRef.current;
     container.innerHTML = ''; // Clear previous content
 
-    const scriptObj = document.createElement('script');
-    scriptObj.type = 'text/javascript';
-    scriptObj.text = `
-      atOptions = {
-        'key' : '${adConfig.adUnitKey}',
-        'format' : 'iframe',
-        'height' : ${height},
-        'width' : ${width},
-        'params' : {}
-      };
-    `;
+    if (format === 'native') {
+      const nativeDiv = document.createElement('div');
+      nativeDiv.id = ADSTERRA_CONFIG.nativeBanner.containerId;
 
-    const scriptInvoke = document.createElement('script');
-    scriptInvoke.type = 'text/javascript';
-    scriptInvoke.src = adScriptUrlFormat(adConfig.adScriptUrl);
+      const scriptInvoke = document.createElement('script');
+      scriptInvoke.async = true;
+      scriptInvoke.setAttribute('data-cfasync', 'false');
+      scriptInvoke.src = ADSTERRA_CONFIG.nativeBanner.adScriptUrl;
 
-    container.appendChild(scriptObj);
-    container.appendChild(scriptInvoke);
+      container.appendChild(scriptInvoke);
+      container.appendChild(nativeDiv);
+    } else {
+      const adConfig = format === '728x90' ? ADSTERRA_CONFIG.topBanner : ADSTERRA_CONFIG.exportModal;
+
+      const scriptObj = document.createElement('script');
+      scriptObj.type = 'text/javascript';
+      scriptObj.text = `
+        atOptions = {
+          'key' : '${adConfig.adUnitKey}',
+          'format' : 'iframe',
+          'height' : ${height},
+          'width' : ${width},
+          'params' : {}
+        };
+      `;
+
+      const scriptInvoke = document.createElement('script');
+      scriptInvoke.type = 'text/javascript';
+      scriptInvoke.src = adConfig.adScriptUrl;
+
+      container.appendChild(scriptObj);
+      container.appendChild(scriptInvoke);
+    }
 
     return () => {
       if (container) container.innerHTML = '';
@@ -85,10 +98,7 @@ export default function AdsterraBanner({ format, className = '' }: AdsterraBanne
               <span>Sponsor Ad Placement</span>
             </div>
             <span className="text-[11px] font-sans text-gray-300 font-medium">
-              Adsterra Banner Slot ({width}×{height}px)
-            </span>
-            <span className="text-[9px] font-mono text-gray-500 max-w-xs">
-              Tempelkan Adsterra Key Anda di <code className="text-amber-400">src/config/adsterra.ts</code>
+              Adsterra Banner Slot ({format})
             </span>
           </div>
         )}
