@@ -1,0 +1,8 @@
+# Robots.txt for Phototor Studio — Free Online Photo Editor & AI Studio
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+
+# Sitemap location for Googlebot & search engine indexing
+Sitemap: https://phototorstudio.com/sitemap.xml

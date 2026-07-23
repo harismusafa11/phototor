@@ -1,0 +1,6 @@
+{
+  "name": "Phototor",
+  "description": "Professional web-based photo editor with advanced layers, tools, filter adjustments, and creative canvas features.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
