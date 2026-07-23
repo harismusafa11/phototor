@@ -7362,12 +7362,7 @@ export default function App() {
                     </button>
                   </div>
 
-                  {/* Adsterra 300x250 Sponsor Banner Placement */}
-                  {ADSTERRA_CONFIG.enabled && ADSTERRA_CONFIG.exportModal.enabled && (
-                    <div className="my-1">
-                      <AdsterraBanner format="300x250" />
-                    </div>
-                  )}
+
 
                   <div className="space-y-3 text-xs">
                     <div>
