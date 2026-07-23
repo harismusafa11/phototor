@@ -44,53 +44,77 @@ export default function AdsterraBanner({ format, className = '' }: AdsterraBanne
     if (!ADSTERRA_CONFIG.enabled || !containerRef.current || isPlaceholder()) return;
 
     const container = containerRef.current;
-    container.innerHTML = ''; // Clear previous content
+    container.innerHTML = ''; // Clear previous container content
 
-    if (format === 'native') {
-      const nativeDiv = document.createElement('div');
-      nativeDiv.id = ADSTERRA_CONFIG.nativeBanner.containerId;
+    // Create an isolated iframe to allow document.write() used by Adsterra invoke.js to run without browser blocking
+    const iframe = document.createElement('iframe');
+    iframe.width = '100%';
+    iframe.height = `${height}px`;
+    iframe.style.border = 'none';
+    iframe.style.outline = 'none';
+    iframe.style.overflow = 'hidden';
+    iframe.style.background = 'transparent';
+    iframe.setAttribute('scrolling', 'no');
 
-      const scriptInvoke = document.createElement('script');
-      scriptInvoke.async = true;
-      scriptInvoke.setAttribute('data-cfasync', 'false');
-      scriptInvoke.src = ADSTERRA_CONFIG.nativeBanner.adScriptUrl;
+    container.appendChild(iframe);
 
-      container.appendChild(scriptInvoke);
-      container.appendChild(nativeDiv);
-    } else {
-      const adConfig = format === '728x90' ? ADSTERRA_CONFIG.topBanner : ADSTERRA_CONFIG.exportModal;
-
-      const scriptObj = document.createElement('script');
-      scriptObj.type = 'text/javascript';
-      scriptObj.text = `
-        atOptions = {
-          'key' : '${adConfig.adUnitKey}',
-          'format' : 'iframe',
-          'height' : ${height},
-          'width' : ${width},
-          'params' : {}
-        };
-      `;
-
-      const scriptInvoke = document.createElement('script');
-      scriptInvoke.type = 'text/javascript';
-      scriptInvoke.src = adConfig.adScriptUrl;
-
-      container.appendChild(scriptObj);
-      container.appendChild(scriptInvoke);
+    const iframeDoc = iframe.contentWindow?.document;
+    if (iframeDoc) {
+      iframeDoc.open();
+      if (format === 'native') {
+        iframeDoc.write(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <style>
+                body { margin: 0; padding: 0; background: transparent; overflow: hidden; display: flex; justify-content: center; align-items: center; }
+              </style>
+            </head>
+            <body>
+              <script async="async" data-cfasync="false" src="${ADSTERRA_CONFIG.nativeBanner.adScriptUrl}"></script>
+              <div id="${ADSTERRA_CONFIG.nativeBanner.containerId}"></div>
+            </body>
+          </html>
+        `);
+      } else {
+        const adConfig = format === '728x90' ? ADSTERRA_CONFIG.topBanner : ADSTERRA_CONFIG.exportModal;
+        iframeDoc.write(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <style>
+                body { margin: 0; padding: 0; background: transparent; overflow: hidden; display: flex; justify-content: center; align-items: center; }
+              </style>
+            </head>
+            <body>
+              <script type="text/javascript">
+                atOptions = {
+                  'key' : '${adConfig.adUnitKey}',
+                  'format' : 'iframe',
+                  'height' : ${height},
+                  'width' : ${width},
+                  'params' : {}
+                };
+              </script>
+              <script type="text/javascript" src="${adConfig.adScriptUrl}"></script>
+            </body>
+          </html>
+        `);
+      }
+      iframeDoc.close();
     }
 
     return () => {
       if (container) container.innerHTML = '';
     };
-  }, [format]);
+  }, [format, width, height]);
 
   return (
     <div className={`flex flex-col items-center justify-center overflow-hidden my-2 ${className}`}>
       <div
         ref={containerRef}
         style={{ width: `${width}px`, maxWidth: '100%', minHeight: `${height}px` }}
-        className="bg-[#181822] border border-[#2a2a38] rounded-lg flex flex-col items-center justify-center relative shadow-inner overflow-hidden select-none"
+        className="bg-transparent rounded-lg flex flex-col items-center justify-center relative overflow-hidden select-none"
       >
         {isPlaceholder() && (
           <div className="flex flex-col items-center justify-center p-4 text-center space-y-1.5 w-full h-full bg-gradient-to-br from-[#181824] to-[#12121a]">
