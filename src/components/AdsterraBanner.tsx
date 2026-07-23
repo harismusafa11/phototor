@@ -37,7 +37,7 @@ export default function AdsterraBanner({ format, className = '' }: AdsterraBanne
       return !ADSTERRA_CONFIG.nativeBanner.enabled || !ADSTERRA_CONFIG.nativeBanner.containerId;
     }
     const adConfig = format === '728x90' ? ADSTERRA_CONFIG.topBanner : ADSTERRA_CONFIG.exportModal;
-    return !adConfig.enabled || adConfig.adUnitKey.includes('placeholder') || adConfig.adUnitKey.startsWith('adsterra_');
+    return !adConfig.enabled || !adConfig.adUnitKey || adConfig.adUnitKey.includes('placeholder') || adConfig.adUnitKey.startsWith('adsterra_');
   };
 
   useEffect(() => {
@@ -46,63 +46,61 @@ export default function AdsterraBanner({ format, className = '' }: AdsterraBanne
     const container = containerRef.current;
     container.innerHTML = ''; // Clear previous container content
 
-    // Create an isolated iframe to allow document.write() used by Adsterra invoke.js to run without browser blocking
+    // Create an isolated iframe using srcdoc so document.write() used by Adsterra invoke.js runs natively without browser blocking
     const iframe = document.createElement('iframe');
-    iframe.width = '100%';
-    iframe.height = `${height}px`;
+    iframe.width = `${width}`;
+    iframe.height = `${height}`;
+    iframe.style.width = `${width}px`;
+    iframe.style.height = `${height}px`;
+    iframe.style.maxWidth = '100%';
     iframe.style.border = 'none';
     iframe.style.outline = 'none';
     iframe.style.overflow = 'hidden';
     iframe.style.background = 'transparent';
     iframe.setAttribute('scrolling', 'no');
 
-    container.appendChild(iframe);
-
-    const iframeDoc = iframe.contentWindow?.document;
-    if (iframeDoc) {
-      iframeDoc.open();
-      if (format === 'native') {
-        iframeDoc.write(`
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <style>
-                body { margin: 0; padding: 0; background: transparent; overflow: hidden; display: flex; justify-content: center; align-items: center; }
-              </style>
-            </head>
-            <body>
-              <script async="async" data-cfasync="false" src="${ADSTERRA_CONFIG.nativeBanner.adScriptUrl}"></script>
-              <div id="${ADSTERRA_CONFIG.nativeBanner.containerId}"></div>
-            </body>
-          </html>
-        `);
-      } else {
-        const adConfig = format === '728x90' ? ADSTERRA_CONFIG.topBanner : ADSTERRA_CONFIG.exportModal;
-        iframeDoc.write(`
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <style>
-                body { margin: 0; padding: 0; background: transparent; overflow: hidden; display: flex; justify-content: center; align-items: center; }
-              </style>
-            </head>
-            <body>
-              <script type="text/javascript">
-                atOptions = {
-                  'key' : '${adConfig.adUnitKey}',
-                  'format' : 'iframe',
-                  'height' : ${height},
-                  'width' : ${width},
-                  'params' : {}
-                };
-              </script>
-              <script type="text/javascript" src="${adConfig.adScriptUrl}"></script>
-            </body>
-          </html>
-        `);
-      }
-      iframeDoc.close();
+    let htmlContent = '';
+    if (format === 'native') {
+      htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
+  </style>
+</head>
+<body>
+  <script async="async" data-cfasync="false" src="${ADSTERRA_CONFIG.nativeBanner.adScriptUrl}"></script>
+  <div id="${ADSTERRA_CONFIG.nativeBanner.containerId}"></div>
+</body>
+</html>`;
+    } else {
+      const adConfig = format === '728x90' ? ADSTERRA_CONFIG.topBanner : ADSTERRA_CONFIG.exportModal;
+      htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
+  </style>
+</head>
+<body>
+  <script type="text/javascript">
+    var atOptions = {
+      'key' : '${adConfig.adUnitKey}',
+      'format' : 'iframe',
+      'height' : ${height},
+      'width' : ${width},
+      'params' : {}
+    };
+  </script>
+  <script type="text/javascript" src="${adConfig.adScriptUrl}"></script>
+</body>
+</html>`;
     }
+
+    iframe.srcdoc = htmlContent;
+    container.appendChild(iframe);
 
     return () => {
       if (container) container.innerHTML = '';
