@@ -46,8 +46,7 @@ export default function AdsterraBanner({ format, className = '' }: AdsterraBanne
     const container = containerRef.current;
     container.innerHTML = ''; // Clear previous content
 
-    // Create an iframe and use doc.open() / doc.write() / doc.close() to create a synchronous HTML parser stream.
-    // This allows Adsterra's invoke.js (which uses document.write) to execute natively without browser blocking.
+    // Create a sandboxed iframe with an open document stream so Adsterra invoke.js document.write() appends seamlessly without wiping document
     const iframe = document.createElement('iframe');
     iframe.width = `${width}`;
     iframe.height = `${height}`;
@@ -108,7 +107,7 @@ export default function AdsterraBanner({ format, className = '' }: AdsterraBanne
             </html>
           `);
         }
-        doc.close();
+        // IMPORTANT: Do NOT call doc.close() here! Leaving the stream open allows Adsterra's async invoke.js script to execute document.write() into the open stream without wiping the document.
       }
     } catch (e) {
       console.warn("Adsterra iframe doc write exception:", e);
