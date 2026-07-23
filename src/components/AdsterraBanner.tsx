@@ -9,7 +9,7 @@
  *    domain headers for Adsterra anti-fraud verification.
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useMemo } from 'react';
 import { ADSTERRA_CONFIG } from '../config/adsterra';
 
 interface AdsterraBannerProps {
@@ -18,9 +18,6 @@ interface AdsterraBannerProps {
 }
 
 export default function AdsterraBanner({ format, className = '' }: AdsterraBannerProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const injectedRef = useRef(false);
-
   const getFormatDimensions = () => {
     switch (format) {
       case '300x250':
@@ -52,37 +49,13 @@ export default function AdsterraBanner({ format, className = '' }: AdsterraBanne
     );
   };
 
-  useEffect(() => {
-    if (isPlaceholder() || !containerRef.current || injectedRef.current) return;
-    injectedRef.current = true;
+  const iframeSrcDoc = useMemo(() => {
+    if (isPlaceholder()) return '';
 
-    const container = containerRef.current;
-    container.innerHTML = '';
-
-    // Create same-origin iframe
-    const iframe = document.createElement('iframe');
-    iframe.width = `${width}`;
-    iframe.height = `${height}`;
-    iframe.style.width = `${width}px`;
-    iframe.style.maxWidth = '100%';
-    iframe.style.height = `${height}px`;
-    iframe.style.border = 'none';
-    iframe.style.outline = 'none';
-    iframe.style.overflow = 'hidden';
-    iframe.style.background = 'transparent';
-    iframe.setAttribute('scrolling', 'no');
-    iframe.setAttribute('title', `adsterra-${format}`);
-
-    container.appendChild(iframe);
-
-    // Synchronously write HTML to the iframe document during open phase
-    const doc = iframe.contentWindow?.document || iframe.contentDocument;
-    if (doc) {
-      doc.open();
-      if (format === 'native') {
-        const containerId = ADSTERRA_CONFIG.nativeBanner.containerId;
-        const scriptUrl = ADSTERRA_CONFIG.nativeBanner.adScriptUrl;
-        doc.write(`<!DOCTYPE html>
+    if (format === 'native') {
+      const containerId = ADSTERRA_CONFIG.nativeBanner.containerId;
+      const scriptUrl = ADSTERRA_CONFIG.nativeBanner.adScriptUrl;
+      return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
@@ -95,10 +68,11 @@ export default function AdsterraBanner({ format, className = '' }: AdsterraBanne
   <div id="${containerId}"></div>
   <script async="async" data-cfasync="false" src="${scriptUrl}"></script>
 </body>
-</html>`);
-      } else {
-        const adConfig = format === '728x90' ? ADSTERRA_CONFIG.topBanner : ADSTERRA_CONFIG.exportModal;
-        doc.write(`<!DOCTYPE html>
+</html>`;
+    }
+
+    const adConfig = format === '728x90' ? ADSTERRA_CONFIG.topBanner : ADSTERRA_CONFIG.exportModal;
+    return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
@@ -119,17 +93,7 @@ export default function AdsterraBanner({ format, className = '' }: AdsterraBanne
   </script>
   <script type="text/javascript" src="${adConfig.adScriptUrl}"></script>
 </body>
-</html>`);
-      }
-      doc.close();
-    }
-
-    return () => {
-      injectedRef.current = false;
-      if (container) {
-        container.innerHTML = '';
-      }
-    };
+</html>`;
   }, [format]);
 
   if (isPlaceholder()) {
@@ -152,16 +116,21 @@ export default function AdsterraBanner({ format, className = '' }: AdsterraBanne
 
   return (
     <div className={`flex flex-col items-center justify-center overflow-hidden my-2 ${className}`}>
-      <div
-        ref={containerRef}
+      <iframe
+        srcDoc={iframeSrcDoc}
+        width={width}
+        height={height}
         style={{
           width: `${width}px`,
           maxWidth: '100%',
-          minHeight: `${height}px`,
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
+          height: `${height}px`,
+          border: 'none',
+          outline: 'none',
+          overflow: 'hidden',
+          background: 'transparent',
         }}
+        scrolling="no"
+        title={`adsterra-${format}`}
       />
     </div>
   );
