@@ -72,6 +72,36 @@ export default function AdsterraBanner({ format, className = '' }: AdsterraBanne
   <script async="async" data-cfasync="false" src="${scriptUrl}"></script>
 </body>
 </html>`;
+    } else if (format === '300x250' && ADSTERRA_CONFIG.exportModal.useHilltop && ADSTERRA_CONFIG.exportModal.hilltopScriptUrl) {
+      const hilltopUrl = ADSTERRA_CONFIG.exportModal.hilltopScriptUrl;
+      htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; display: flex; justify-content: center; align-items: center; }
+  </style>
+</head>
+<body>
+  <script type="text/javascript">
+    (function(kcyx){
+      var d = document,
+          s = d.createElement('script'),
+          l = d.scripts[d.scripts.length - 1];
+      s.settings = kcyx || {};
+      s.src = "${hilltopUrl}";
+      s.async = true;
+      s.referrerPolicy = 'no-referrer-when-downgrade';
+      if (l && l.parentNode) {
+        l.parentNode.insertBefore(s, l);
+      } else {
+        d.body.appendChild(s);
+      }
+    })({});
+  </script>
+</body>
+</html>`;
     } else {
       const adConfig = format === '728x90' ? ADSTERRA_CONFIG.topBanner : ADSTERRA_CONFIG.exportModal;
       htmlContent = `<!DOCTYPE html>

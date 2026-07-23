@@ -10,6 +10,8 @@ export interface AdsterraConfig {
     countdownSeconds: number; // Seconds user waits before download button unlocks
     adUnitKey: string;        // Adsterra 300x250 ad unit key
     adScriptUrl: string;      // Adsterra invoke.js script URL
+    hilltopScriptUrl?: string; // HilltopAds script URL
+    useHilltop?: boolean;     // Flag to temporarily use HilltopAds for export modal
   };
   topBanner: {
     enabled: boolean;
@@ -36,6 +38,8 @@ export const ADSTERRA_CONFIG: AdsterraConfig = {
     countdownSeconds: Number(import.meta.env.VITE_ADSTERRA_COUNTDOWN) || 15,
     adUnitKey: import.meta.env.VITE_ADSTERRA_300X250_KEY || '0c3e1fa0be7e2932e13ef9eab9717c24',
     adScriptUrl: import.meta.env.VITE_ADSTERRA_300X250_URL || 'https://www.highperformanceformat.com/0c3e1fa0be7e2932e13ef9eab9717c24/invoke.js',
+    hilltopScriptUrl: 'https://massivesalad.com/b.XnVTs/d-G/lU0FYeWpcu/qeymb9AufZaUTlLk/PcTicjydN/TYEx0uMuDJEYtDNZzDIY1rMcTFQ/wrNcQT',
+    useHilltop: true,
   },
   topBanner: {
     enabled: true,
